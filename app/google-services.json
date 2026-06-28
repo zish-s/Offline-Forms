@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "804841555298",
+    "project_id": "offlineforms-3fc8e",
+    "storage_bucket": "offlineforms-3fc8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:804841555298:android:956fba5e46ef6330d5583b",
+        "android_client_info": {
+          "package_name": "com.example.offlineforms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJp9MPfe2wO8IJ-Az65Ljl926geQtnvqk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
