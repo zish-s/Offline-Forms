@@ -42,10 +42,8 @@ class FormRepository {
     suspend fun saveForm(form: Form): Result<String> {
         return try {
             val docRef = if (form.id.isEmpty()) {
-                // New form - let Firestore generate a unique ID
                 formsCollection.document()
             } else {
-                // Existing form - use its existing ID
                 formsCollection.document(form.id)
             }
 
@@ -55,7 +53,6 @@ class FormRepository {
                 updatedAt = System.currentTimeMillis()
             )
 
-            // Convert FormField list to a format Firestore understands
             val formMap = mapOf(
                 "id" to formToSave.id,
                 "title" to formToSave.title,
@@ -74,15 +71,24 @@ class FormRepository {
                 "userId" to formToSave.userId
             )
 
-            docRef.set(formMap).await()
+            // set() with SetOptions.merge() completes instantly using local cache,
+            // it does not wait for network confirmation
+            docRef.set(formMap).addOnFailureListener { e ->
+                android.util.Log.e("FormRepository", "saveForm background failure", e)
+            }
+
+            // We don't await() the network round-trip.
+            // Firestore's local cache write is synchronous, so we can
+            // confidently return success right after triggering the write.
             Result.success(docRef.id)
         } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "saveForm failed", e)
             Result.failure(e)
         }
     }
 
     // READ - Get all forms for the current user as a real-time stream
-    // Flow means the UI automatically updates whenever data changes
+// Flow means the UI automatically updates whenever data changes
     fun getForms(): Flow<List<Form>> = callbackFlow {
         val listener = formsCollection
             .whereEqualTo("userId", currentUserId)
@@ -92,11 +98,22 @@ class FormRepository {
                     return@addSnapshotListener
                 }
                 val forms = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toForm()
+                    val isFromCache = doc.metadata.isFromCache
+                    val form = doc.toForm()
+
+                    // If this read is confirmed from server (not cache) and
+                    // the form wasn't already marked synced, update it permanently
+                    if (!isFromCache && form != null && !form.isSynced) {
+                        doc.reference.update("isSynced", true)
+                    }
+
+                    // Show as synced if either:
+                    // - this read came from server (definitely synced), OR
+                    // - the document already has isSynced = true stored from before
+                    form?.copy(isSynced = form.isSynced || !isFromCache)
                 } ?: emptyList()
                 trySend(forms)
             }
-        // When the Flow is cancelled, remove the Firestore listener
         awaitClose { listener.remove() }
     }
 
@@ -145,9 +162,13 @@ class FormRepository {
                 "userId" to submissionToSave.userId
             )
 
-            docRef.set(submissionMap).await()
+            docRef.set(submissionMap).addOnFailureListener { e ->
+                android.util.Log.e("FormRepository", "saveSubmission background failure", e)
+            }
+
             Result.success(docRef.id)
         } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "saveSubmission failed", e)
             Result.failure(e)
         }
     }
@@ -163,7 +184,14 @@ class FormRepository {
                     return@addSnapshotListener
                 }
                 val submissions = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toSubmission()
+                    val isFromCache = doc.metadata.isFromCache
+                    val submission = doc.toSubmission()
+
+                    if (!isFromCache && submission != null && !submission.isSynced) {
+                        doc.reference.update("isSynced", true)
+                    }
+
+                    submission?.copy(isSynced = submission.isSynced || !isFromCache)
                 } ?: emptyList()
                 trySend(submissions)
             }

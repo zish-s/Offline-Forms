@@ -21,6 +21,8 @@ import com.example.offlineforms.data.model.FormField
 import com.example.offlineforms.Navigation.Routes
 import com.example.offlineforms.ui.viewmodel.FormViewModel
 import java.util.UUID
+import androidx.compose.foundation.layout.FlowRow
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -369,15 +371,18 @@ fun FieldCard(
 }
 
 // Scrollable row of field type chips
+@OptIn(ExperimentalLayoutApi::class)
+
 @Composable
 fun FieldTypeSelector(
     selectedType: FieldType,
     onTypeSelected: (FieldType) -> Unit
 ) {
-    Row(
+    FlowRow (
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
-    ) {
+    ){
         FieldType.values().forEach { type ->
             FilterChip(
                 selected = selectedType == type,

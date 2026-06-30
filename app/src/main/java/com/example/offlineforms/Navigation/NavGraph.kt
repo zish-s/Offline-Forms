@@ -8,7 +8,7 @@ import com.example.offlineforms.ui.screens.LoginScreen
 import com.example.offlineforms.ui.screens.HomeScreen
 import com.example.offlineforms.ui.screens.FormBuilderScreen
 import com.example.offlineforms.ui.screens.FormPreviewScreen
-import com.example.offlineforms.ui.screens.FormFillScreen
+import com.example.offlineforms.ui.screens.FillFormScreen
 import com.example.offlineforms.ui.screens.ResponsesScreen
 import com.example.offlineforms.ui.screens.ResponseDetailScreen
 
@@ -50,7 +50,7 @@ fun AppNavGraph() {
         }
         composable(Routes.FILL_FORM) { backStackEntry ->
             val formId = backStackEntry.arguments?.getString("formId") ?: return@composable
-            FormFillScreen(navController = navController, formId = formId)
+            FillFormScreen(navController = navController, formId = formId)
         }
         composable(Routes.RESPONSES) { backStackEntry ->
             val formId = backStackEntry.arguments?.getString("formId") ?: return@composable

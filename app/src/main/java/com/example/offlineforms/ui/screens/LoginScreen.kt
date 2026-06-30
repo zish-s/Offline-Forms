@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.Navigation.Routes
 import com.example.offlineforms.ui.viewmodel.FormViewModel
+import androidx.compose.foundation.background
 
 @Composable
 fun LoginScreen(
@@ -36,6 +37,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)  //added to actively define that for a dark theme choose darkthemecolorscheme and vice versa
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -101,7 +103,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
+                label = { Text("please enter a minimun 6 digit password") },
                 leadingIcon = {
                     Icon(Icons.Default.Lock, contentDescription = null)
                 },
