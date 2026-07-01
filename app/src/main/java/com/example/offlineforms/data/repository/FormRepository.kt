@@ -222,11 +222,29 @@ class FormRepository {
     // AUTH OPERATIONS
     // ─────────────────────────────────────────
 
-    suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
+    suspend fun signInOrLink(email: String, password: String): Result<Unit> {
         return try {
-            auth.signInWithEmailAndPassword(email, password).await()
-            Result.success(Unit)
+            val currentUser = auth.currentUser
+            if (currentUser != null && currentUser.isAnonymous) {
+                // Anonymous user upgrading to real account
+                try {
+                    val credential = com.google.firebase.auth.EmailAuthProvider
+                        .getCredential(email, password)
+                    currentUser.linkWithCredential(credential).await()
+                    Result.success(Unit)
+                } catch (e: Exception) {
+                    // Link failed — they likely already have an account
+                    // Sign in normally instead
+                    auth.signInWithEmailAndPassword(email, password).await()
+                    Result.success(Unit)
+                }
+            } else {
+                // No anonymous session — just sign in normally
+                auth.signInWithEmailAndPassword(email, password).await()
+                Result.success(Unit)
+            }
         } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "signInOrLink failed", e)
             Result.failure(e)
         }
     }
@@ -236,6 +254,40 @@ class FormRepository {
             auth.createUserWithEmailAndPassword(email, password).await()
             Result.success(Unit)
         } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "signUp failed", e)
+            Result.failure(e)
+        }
+    }
+
+    // Signs in anonymously — no email/password needed
+// Firebase creates a temporary account automatically
+// This works silently in the background on first launch
+
+    suspend fun signInAnonymously(): Result<Unit> {
+        return try {
+            auth.signInAnonymously().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "Anonymous sign in failed", e)
+            Result.failure(e)
+        }
+    }
+
+    // Checks if current user is anonymous (not signed into a real account)
+    fun isUserAnonymous(): Boolean {
+        return auth.currentUser?.isAnonymous ?: true
+    }
+
+    // Links anonymous account to real email account
+// This preserves all locally saved forms when user decides to sign up
+    suspend fun linkAnonymousToEmail(email: String, password: String): Result<Unit> {
+        return try {
+            val credential = com.google.firebase.auth.EmailAuthProvider
+                .getCredential(email, password)
+            auth.currentUser?.linkWithCredential(credential)?.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "Account linking failed", e)
             Result.failure(e)
         }
     }

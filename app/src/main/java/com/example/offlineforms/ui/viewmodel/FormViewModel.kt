@@ -9,10 +9,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
 
 class FormViewModel : ViewModel() {
 
     private val repository = FormRepository()
+
+    private val auth = FirebaseAuth.getInstance()
 
     // ─────────────────────────────────────────
     // STATE - what the UI observes
@@ -160,7 +163,7 @@ class FormViewModel : ViewModel() {
     fun signIn(email: String, password: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            val result = repository.signInWithEmail(email, password)
+            val result = repository.signUpWithEmail(email, password)
             _isLoading.value = false
             if (result.isSuccess) {
                 _isLoggedIn.value = true
@@ -168,6 +171,53 @@ class FormViewModel : ViewModel() {
             } else {
                 _errorMessage.value = result.exceptionOrNull()?.message
                     ?: "Sign in failed"
+            }
+        }
+    }
+
+    fun getCurrentUser() = auth.currentUser
+
+    // Called on app startup — handles the full auth initialization flow
+// This runs once when the app first opens
+    fun initializeAuth(
+        onReady: () -> Unit,
+        onNoInternet: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val currentUser = getCurrentUser()
+            when {
+                // Already have a session (anonymous or real) — go straight to home
+                currentUser != null -> {
+                    _isLoggedIn.value = true
+                    onReady()
+                }
+                // No session — try anonymous sign in
+                else -> {
+                    val result = repository.signInAnonymously()
+                    if (result.isSuccess) {
+                        _isLoggedIn.value = true
+                        onReady()
+                    } else {
+                        // Anonymous sign in failed — no internet on first ever launch
+                        onNoInternet()
+                    }
+                }
+            }
+        }
+    }
+
+
+    fun signInOrLink(email: String, password: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = repository.signInOrLink(email, password)
+            _isLoading.value = false
+            if (result.isSuccess) {
+                _isLoggedIn.value = true
+                onSuccess()
+            } else {
+                _errorMessage.value = result.exceptionOrNull()?.message
+                    ?: "Sign in failed. Check your email and password."
             }
         }
     }
@@ -182,9 +232,14 @@ class FormViewModel : ViewModel() {
                 onSuccess()
             } else {
                 _errorMessage.value = result.exceptionOrNull()?.message
-                    ?: "Sign up failed"
+                    ?: "Sign up failed."
             }
         }
+    }
+
+    // Check if current user is anonymous
+    fun isUserAnonymous(): Boolean {
+        return repository.isUserAnonymous()
     }
 
     fun signOut(onSuccess: () -> Unit) {

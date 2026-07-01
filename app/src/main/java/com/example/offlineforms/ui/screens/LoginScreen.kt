@@ -1,5 +1,6 @@
 package com.example.offlineforms.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,16 +17,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.Navigation.Routes
 import com.example.offlineforms.ui.viewmodel.FormViewModel
-import androidx.compose.foundation.background
 
 @Composable
 fun LoginScreen(
     navController: NavController,
-    formViewModel: FormViewModel = viewModel()
+    formViewModel: FormViewModel
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -37,7 +36,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)  //added to actively define that for a dark theme choose darkthemecolorscheme and vice versa
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -46,7 +45,7 @@ fun LoginScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // App icon placeholder
+            // App logo
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = RoundedCornerShape(20.dp),
@@ -65,7 +64,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = if (isSignUp) "Create account" else "Welcome back",
+                text = if (isSignUp) "Create account" else "Sign in to sync",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onBackground
@@ -73,9 +72,9 @@ fun LoginScreen(
 
             Text(
                 text = if (isSignUp)
-                    "Sign up to start building forms."
+                    "Create an account to back up your forms and sync across devices."
                 else
-                    "Sign in to sync your forms to the cloud.",
+                    "Sign in to sync your forms and responses to the cloud.",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center
@@ -83,7 +82,6 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Email field
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -99,11 +97,10 @@ fun LoginScreen(
                 singleLine = true
             )
 
-            // Password field
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("please enter a minimun 6 digit password") },
+                label = { Text("Password") },
                 leadingIcon = {
                     Icon(Icons.Default.Lock, contentDescription = null)
                 },
@@ -116,7 +113,6 @@ fun LoginScreen(
                 singleLine = true
             )
 
-            // Error message
             errorMessage?.let { error ->
                 Text(
                     text = error,
@@ -128,7 +124,7 @@ fun LoginScreen(
                 }
             }
 
-            // Sign in / Sign up button
+            // Main action button
             Button(
                 onClick = {
                     if (isSignUp) {
@@ -138,7 +134,7 @@ fun LoginScreen(
                             }
                         }
                     } else {
-                        formViewModel.signIn(email, password) {
+                        formViewModel.signInOrLink(email, password) {
                             navController.navigate(Routes.HOME) {
                                 popUpTo(Routes.LOGIN) { inclusive = true }
                             }
@@ -178,6 +174,16 @@ fun LoginScreen(
                     else
                         "No account? Sign up",
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Skip option - go back without signing in
+            TextButton(
+                onClick = { navController.popBackStack() }
+            ) {
+                Text(
+                    text = "Continue without account",
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
             }
         }

@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.example.offlineforms.ui.themes.OfflineFormsTheme
-import com.example.offlineforms.Navigation.AppNavGraph
+import com.example.offlineforms.Navigation.NavGraph
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge() // lets your UI draw behind the system status bar for a modern full-screen look
         setContent {  //UI starts
             OfflineFormsTheme {
-                AppNavGraph() //decides which screen shows
+                NavGraph() //decides which screen shows
             }
         }
     }

@@ -44,16 +44,20 @@ fun HomeScreen(
         drawerState = drawerState,
         drawerContent = {
             AppSidebar(
+                isAnonymous = formViewModel.isUserAnonymous(),
                 onHomeClick = {
-                    scope.launch{
-                        drawerState.close() }
+                    scope.launch { drawerState.close() }
                 },
                 onFormsClick = {
                     scope.launch { drawerState.close() }
                 },
+                onSignInClick = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Routes.LOGIN)
+                },
                 onSignOutClick = {
                     formViewModel.signOut {
-                        navController.navigate(Routes.LOGIN) {
+                        navController.navigate(Routes.STARTUP) {
                             popUpTo(Routes.HOME) { inclusive = true }
                         }
                     }
@@ -166,6 +170,7 @@ fun HomeScreen(
         }
     }
 }
+
 
 @Composable
 fun FormCard(
@@ -343,8 +348,10 @@ fun SyncBadge(isSynced: Boolean) {
 
 @Composable
 fun AppSidebar(
+    isAnonymous: Boolean,
     onHomeClick: () -> Unit,
     onFormsClick: () -> Unit,
+    onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit
 ) {
     ModalDrawerSheet(
@@ -367,11 +374,7 @@ fun AppSidebar(
             selected = true,
             onClick = onHomeClick,
             icon = {
-                Icon(
-                    Icons.Default.Home,
-                    contentDescription = null,
-                    tint = Color.White
-                )
+                Icon(Icons.Default.Home, contentDescription = null, tint = Color.White)
             },
             colors = NavigationDrawerItemDefaults.colors(
                 selectedContainerColor = Color(0xFF534AB7),
@@ -398,22 +401,42 @@ fun AppSidebar(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        NavigationDrawerItem(
-            label = { Text("Sign out", color = Color(0xFFAFA9EC)) },
-            selected = false,
-            onClick = onSignOutClick,
-            icon = {
-                Icon(
-                    Icons.Default.Logout,
-                    contentDescription = null,
-                    tint = Color(0xFFAFA9EC)
+        // Show different option based on auth state
+        if (isAnonymous) {
+            NavigationDrawerItem(
+                label = { Text("Sign in to sync", color = Color(0xFFAFA9EC)) },
+                selected = false,
+                onClick = onSignInClick,
+                icon = {
+                    Icon(
+                        Icons.Default.AccountCircle,
+                        contentDescription = null,
+                        tint = Color(0xFFAFA9EC)
+                    )
+                },
+                colors = NavigationDrawerItemDefaults.colors(
+                    selectedContainerColor = Color(0xFF534AB7),
+                    unselectedContainerColor = Color.Transparent
                 )
-            },
-            colors = NavigationDrawerItemDefaults.colors(
-                selectedContainerColor = Color(0xFF534AB7),
-                unselectedContainerColor = Color.Transparent
             )
-        )
+        } else {
+            NavigationDrawerItem(
+                label = { Text("Sign out", color = Color(0xFFAFA9EC)) },
+                selected = false,
+                onClick = onSignOutClick,
+                icon = {
+                    Icon(
+                        Icons.Default.Logout,
+                        contentDescription = null,
+                        tint = Color(0xFFAFA9EC)
+                    )
+                },
+                colors = NavigationDrawerItemDefaults.colors(
+                    selectedContainerColor = Color(0xFF534AB7),
+                    unselectedContainerColor = Color.Transparent
+                )
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
     }
