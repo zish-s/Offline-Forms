@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
+import com.example.offlineforms.data.model.ImportedForm
 
 class FormViewModel : ViewModel() {
 
@@ -52,6 +53,48 @@ class FormViewModel : ViewModel() {
     // ─────────────────────────────────────────
     // FORM OPERATIONS
     // ─────────────────────────────────────────
+
+    // State for imported forms list
+    private val _importedForms = MutableStateFlow<List<ImportedForm>>(emptyList())
+    val importedForms: StateFlow<List<ImportedForm>> = _importedForms.asStateFlow()
+
+    // Load all imported forms
+    fun loadImportedForms() {
+        viewModelScope.launch {
+            repository.getImportedForms().collect { imports ->
+                _importedForms.value = imports
+            }
+        }
+    }
+
+    // Export a form as JSON string
+    fun exportFormAsJson(form: Form): String {
+        return repository.exportFormToJson(form)
+    }
+
+    // Parse and save an imported form
+    fun importFormFromJson(jsonString: String, onSuccess: () -> Unit, onError: () -> Unit) {
+        viewModelScope.launch {
+            val importedForm = repository.parseImportedForm(jsonString)
+            if (importedForm != null) {
+                val result = repository.saveImportedForm(importedForm)
+                if (result.isSuccess) {
+                    onSuccess()
+                } else {
+                    onError()
+                }
+            } else {
+                onError()
+            }
+        }
+    }
+
+    // Delete an imported form
+    fun deleteImportedForm(importId: String) {
+        viewModelScope.launch {
+            repository.deleteImportedForm(importId)
+        }
+    }
 
     // Load all forms for the home screen
     // Called once when HomeScreen appears

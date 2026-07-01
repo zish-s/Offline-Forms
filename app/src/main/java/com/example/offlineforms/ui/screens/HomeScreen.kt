@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,14 +16,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.data.model.Form
 import com.example.offlineforms.Navigation.Routes
 import com.example.offlineforms.ui.viewmodel.FormViewModel
+import com.example.offlineforms.utils.formatTimestamp
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,7 @@ fun HomeScreen(
     val forms by formViewModel.forms.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // Load forms when screen first appears
     LaunchedEffect(Unit) {
@@ -45,11 +47,11 @@ fun HomeScreen(
         drawerContent = {
             AppSidebar(
                 isAnonymous = formViewModel.isUserAnonymous(),
-                onHomeClick = {
+                onHomeClick = { scope.launch { drawerState.close() } },
+                onFormsClick = { scope.launch { drawerState.close() } },
+                onImportsClick = {
                     scope.launch { drawerState.close() }
-                },
-                onFormsClick = {
-                    scope.launch { drawerState.close() }
+                    navController.navigate(Routes.IMPORTS)
                 },
                 onSignInClick = {
                     scope.launch { drawerState.close() }
@@ -120,7 +122,7 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Article,
+                            imageVector = Icons.AutoMirrored.Filled.Article,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
@@ -162,6 +164,32 @@ fun HomeScreen(
                             },
                             onDeleteClick = {
                                 formViewModel.deleteForm(form.id)
+                            },
+                            onShareClick = {
+                                val jsonString = formViewModel.exportFormAsJson(form)
+                                val fileName = "${form.title.replace(" ", "_")}_form.json"
+
+                                // Write to cache directory
+                                val file = java.io.File(context.cacheDir, fileName)
+                                file.writeText(jsonString)
+
+                                // Get secure URI via FileProvider
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.provider",
+                                    file
+                                )
+
+                                // Open Android share sheet
+                                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "application/json"
+                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "OfflineForms: ${form.title}")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(
+                                    android.content.Intent.createChooser(shareIntent, "Share form via")
+                                )
                             }
                         )
                     }
@@ -178,7 +206,8 @@ fun FormCard(
     onEditClick: () -> Unit,
     onFillClick: () -> Unit,
     onResponsesClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onShareClick: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -238,7 +267,7 @@ fun FormCard(
             // Sync status badge
             SyncBadge(isSynced = form.isSynced)
 
-            Divider(
+            HorizontalDivider(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
             )
 
@@ -247,6 +276,18 @@ fun FormCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                //share button
+
+                OutlinedButton(
+                    onClick = onShareClick,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Share", fontSize = 12.sp)
+                }
+
                 // Edit button
                 OutlinedButton(
                     onClick = onEditClick,
@@ -351,8 +392,10 @@ fun AppSidebar(
     isAnonymous: Boolean,
     onHomeClick: () -> Unit,
     onFormsClick: () -> Unit,
+    onImportsClick: () -> Unit,
     onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit
+
 ) {
     ModalDrawerSheet(
         drawerContainerColor = Color(0xFF26215C)
@@ -383,12 +426,12 @@ fun AppSidebar(
         )
 
         NavigationDrawerItem(
-            label = { Text("My forms", color = Color.White) },
+            label = { Text("Imports", color = Color.White) },
             selected = false,
-            onClick = onFormsClick,
+            onClick = onImportsClick,
             icon = {
                 Icon(
-                    Icons.Default.Article,
+                    Icons.Default.Download,
                     contentDescription = null,
                     tint = Color(0xFFAFA9EC)
                 )
@@ -439,17 +482,5 @@ fun AppSidebar(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-    }
-}
-
-// Helper to format timestamps into readable strings
-fun formatTimestamp(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-    return when {
-        diff < 60_000 -> "just now"
-        diff < 3_600_000 -> "${diff / 60_000}m ago"
-        diff < 86_400_000 -> "${diff / 3_600_000}h ago"
-        else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
     }
 }

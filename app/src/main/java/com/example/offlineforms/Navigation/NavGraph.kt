@@ -20,6 +20,8 @@ import com.example.offlineforms.ui.screens.ResponseDetailScreen
 import com.example.offlineforms.ui.screens.NoInternetScreen
 import com.example.offlineforms.ui.screens.StartupScreen
 import com.example.offlineforms.ui.viewmodel.FormViewModel
+import com.example.offlineforms.ui.screens.ImportsScreen
+import com.example.offlineforms.ui.screens.FillImportedFormScreen
 
 object Routes {
     const val STARTUP = "startup"
@@ -32,12 +34,15 @@ object Routes {
     const val RESPONSES = "responses/{formId}"
     const val RESPONSE_DETAIL = "response_detail/{responseId}"
     const val NO_INTERNET = "no_internet"
+
+    const val IMPORTS = "imports"
+    const val FILL_IMPORTED = "fill_imported/{importId}"
 }
 
 @Composable
-fun NavGraph() {
+fun NavGraph(formViewModel: FormViewModel = viewModel()) {
     val navController = rememberNavController()
-    val formViewModel: FormViewModel = viewModel()
+
 
     NavHost(
         navController = navController,
@@ -137,6 +142,23 @@ fun NavGraph() {
             ResponseDetailScreen(
                 navController = navController,
                 responseId = responseId,
+                formViewModel = formViewModel
+            )
+        }
+
+        composable(Routes.IMPORTS) {
+            ImportsScreen(
+                navController = navController,
+                formViewModel = formViewModel
+            )
+        }
+
+        composable(Routes.FILL_IMPORTED) { backStackEntry ->
+            val importId = backStackEntry.arguments?.getString("importId")
+                ?: return@composable
+            FillImportedFormScreen(
+                navController = navController,
+                importId = importId,
                 formViewModel = formViewModel
             )
         }

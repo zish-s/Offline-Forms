@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.data.model.FormSubmission
 import com.example.offlineforms.ui.viewmodel.FormViewModel
+import com.example.offlineforms.utils.formatTimestamp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

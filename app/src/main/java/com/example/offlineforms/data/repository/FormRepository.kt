@@ -11,11 +11,12 @@ import com.example.offlineforms.data.model.FormField
 import com.example.offlineforms.data.model.FormSubmission
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-
+import com.example.offlineforms.data.model.ImportedForm
 class FormRepository {
 
     // These are our two entry points into Firebase
@@ -32,6 +33,8 @@ class FormRepository {
 
     // Reference to the "submissions" collection in Firestore
     private val submissionsCollection = firestore.collection("submissions")
+
+    private val importsCollection = firestore.collection("imports")
 
     // ─────────────────────────────────────────
     // FORM CRUD OPERATIONS
@@ -305,7 +308,33 @@ class FormRepository {
     // documents back into our data classes
     // ─────────────────────────────────────────
 
-    private fun com.google.firebase.firestore.DocumentSnapshot.toForm(): Form? {
+    private fun DocumentSnapshot.toImportedForm(): ImportedForm? {
+        return try {
+            val fieldsData = get("fields") as? List<Map<String, Any>> ?: emptyList()
+            ImportedForm(
+                id = getString("id") ?: "",
+                title = getString("title") ?: "",
+                fields = fieldsData.map { fieldMap ->
+                    FormField(
+                        id = fieldMap["id"] as? String ?: "",
+                        label = fieldMap["label"] as? String ?: "",
+                        type = FieldType.valueOf(
+                            fieldMap["type"] as? String ?: "TEXT"
+                        ),
+                        isRequired = fieldMap["isRequired"] as? Boolean ?: false,
+                        options = fieldMap["options"] as? List<String> ?: emptyList()
+                    )
+                },
+                importedAt = getLong("importedAt") ?: 0L,
+                originalCreatorId = getString("originalCreatorId") ?: "",
+                originalFormId = getString("originalFormId") ?: ""
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun DocumentSnapshot.toForm(): Form? {
         return try {
             val fieldsData = get("fields") as? List<Map<String, Any>> ?: emptyList()
             Form(
@@ -332,7 +361,7 @@ class FormRepository {
         }
     }
 
-    private fun com.google.firebase.firestore.DocumentSnapshot.toSubmission(): FormSubmission? {
+    private fun DocumentSnapshot.toSubmission(): FormSubmission? {
         return try {
             FormSubmission(
                 id = getString("id") ?: "",
@@ -345,6 +374,198 @@ class FormRepository {
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    // ─────────────────────────────────────────
+// EXPORT / IMPORT OPERATIONS
+// ─────────────────────────────────────────
+
+    // Converts a Form to a JSON string for sharing
+    fun exportFormToJson(form: Form): String {
+        val fieldsJson = form.fields.joinToString(",") { field ->
+            """
+        {
+            "id": "${field.id}",
+            "label": "${field.label}",
+            "type": "${field.type.name}",
+            "isRequired": ${field.isRequired},
+            "options": [${field.options.joinToString(",") { "\"$it\"" }}]
+        }
+        """.trimIndent()
+        }
+
+        return """
+    {
+        "offlineFormsExport": true,
+        "id": "${form.id}",
+        "title": "${form.title}",
+        "creatorUserId": "${form.userId}",
+        "createdAt": ${form.createdAt},
+        "fields": [$fieldsJson]
+    }
+    """.trimIndent()
+    }
+
+    // Parses a JSON string back into an ImportedForm
+    fun parseImportedForm(jsonString: String): ImportedForm? {
+        return try {
+            // Basic JSON parsing without external library
+            fun extractString(json: String, key: String): String {
+                val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\""
+                val match = Regex(pattern).find(json)
+                return match?.groupValues?.get(1) ?: ""
+            }
+
+            fun extractBoolean(json: String, key: String): Boolean {
+                val pattern = "\"$key\"\\s*:\\s*(true|false)"
+                val match = Regex(pattern).find(json)
+                return match?.groupValues?.get(1) == "true"
+            }
+
+            fun extractLong(json: String, key: String): Long {
+                val pattern = "\"$key\"\\s*:\\s*(\\d+)"
+                val match = Regex(pattern).find(json)
+                return match?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            }
+
+            fun extractArray(json: String, key: String): String {
+                val startKey = "\"$key\""
+                val startIndex = json.indexOf(startKey)
+                if (startIndex == -1) return "[]"
+                val arrayStart = json.indexOf("[", startIndex)
+                if (arrayStart == -1) return "[]"
+                var depth = 0
+                var i = arrayStart
+                while (i < json.length) {
+                    when (json[i]) {
+                        '[' -> depth++
+                        ']' -> {
+                            depth--
+                            if (depth == 0) return json.substring(arrayStart, i + 1)
+                        }
+                    }
+                    i++
+                }
+                return "[]"
+            }
+
+            fun extractObjects(arrayJson: String): List<String> {
+                val objects = mutableListOf<String>()
+                var depth = 0
+                var start = -1
+                for (i in arrayJson.indices) {
+                    when (arrayJson[i]) {
+                        '{' -> {
+                            if (depth == 0) start = i
+                            depth++
+                        }
+                        '}' -> {
+                            depth--
+                            if (depth == 0 && start != -1) {
+                                objects.add(arrayJson.substring(start, i + 1))
+                            }
+                        }
+                    }
+                }
+                return objects
+            }
+
+            fun extractStringList(arrayJson: String): List<String> {
+                return Regex("\"([^\"]*)\"").findAll(arrayJson)
+                    .map { it.groupValues[1] }
+                    .toList()
+            }
+
+            // Verify it's a valid OfflineForms export
+            if (!jsonString.contains("\"offlineFormsExport\": true")) return null
+
+            val fieldsArrayJson = extractArray(jsonString, "fields")
+            val fieldObjects = extractObjects(fieldsArrayJson)
+
+            val fields = fieldObjects.map { fieldJson ->
+                val optionsArrayJson = extractArray(fieldJson, "options")
+                FormField(
+                    id = extractString(fieldJson, "id"),
+                    label = extractString(fieldJson, "label"),
+                    type = try {
+                        FieldType.valueOf(extractString(fieldJson, "type"))
+                    } catch (e: Exception) {
+                        FieldType.TEXT
+                    },
+                    isRequired = extractBoolean(fieldJson, "isRequired"),
+                    options = extractStringList(optionsArrayJson)
+                )
+            }
+
+            ImportedForm(
+                id = java.util.UUID.randomUUID().toString(),
+                title = extractString(jsonString, "title"),
+                fields = fields,
+                importedAt = System.currentTimeMillis(),
+                originalCreatorId = extractString(jsonString, "creatorUserId"),
+                originalFormId = extractString(jsonString, "id")
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "parseImportedForm failed", e)
+            null
+        }
+    }
+
+    // Save imported form to Firestore under "imports" collection
+    suspend fun saveImportedForm(importedForm: ImportedForm): Result<String> {
+        return try {
+            val docRef = importsCollection.document(importedForm.id)
+            val importMap = mapOf(
+                "id" to importedForm.id,
+                "title" to importedForm.title,
+                "fields" to importedForm.fields.map { field ->
+                    mapOf(
+                        "id" to field.id,
+                        "label" to field.label,
+                        "type" to field.type.name,
+                        "isRequired" to field.isRequired,
+                        "options" to field.options
+                    )
+                },
+                "importedAt" to importedForm.importedAt,
+                "originalCreatorId" to importedForm.originalCreatorId,
+                "originalFormId" to importedForm.originalFormId,
+                "userId" to currentUserId
+            )
+            docRef.set(importMap).addOnFailureListener { e ->
+                android.util.Log.e("FormRepository", "saveImportedForm background failure", e)
+            }
+            Result.success(importedForm.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Get all imported forms as a live stream
+    fun getImportedForms(): Flow<List<ImportedForm>> = callbackFlow {
+        val listener = importsCollection
+            .whereEqualTo("userId", currentUserId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val imports = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toImportedForm()
+                } ?: emptyList()
+                trySend(imports)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    // Delete an imported form
+    suspend fun deleteImportedForm(importId: String): Result<Unit> {
+        return try {
+            importsCollection.document(importId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }
