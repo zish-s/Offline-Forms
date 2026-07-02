@@ -12,7 +12,20 @@
           "package_name": "com.example.offlineforms"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "804841555298-gc1bs7upmhvvt1vj88vcdoioi3d5itca.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.offlineforms",
+            "certificate_hash": "6a5b01d4928e416ce3d2c5afdbdbb4af2e8df063"
+          }
+        },
+        {
+          "client_id": "804841555298-aopl5nhhkdl3s4iar05o2tddjeg4agdc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBJp9MPfe2wO8IJ-Az65Ljl926geQtnvqk"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "804841555298-aopl5nhhkdl3s4iar05o2tddjeg4agdc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
