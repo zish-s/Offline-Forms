@@ -6,15 +6,14 @@ An offline-first Android app for building, filling, and sharing data collection 
 
 ## Demo & Screenshots
 
-> _Add screenshots and screen recordings here_
 
 | Login | Home | Form Builder |
 |:-----:|:----:|:------------:|
-| `[ screenshot ]` | `[ screenshot ]` | `[ screenshot ]` |
+| <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/4d2b943d-4934-4a80-bdfd-6f5e2a6410f6" /> | <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/b2d7a937-833c-42c1-865e-7cf30a6fcbc8" /> | <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/41298861-0417-4736-b432-b69db4dccb0e" /> |
 
 | Fill Form | Responses | Imports |
 |:---------:|:---------:|:-------:|
-| `[ screenshot ]` | `[ screenshot ]` | `[ screenshot ]` |
+| <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/e4ce3bed-2c95-470c-8190-d405d20ab690" /> | <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/b56b416a-079d-4a26-9895-c6a3bfd1033b" /> | <img width="246" height="533" alt="image" src="https://github.com/user-attachments/assets/7d1e143e-55c9-44e8-b813-ba082cff9b02" /> |
 
 ---
 
