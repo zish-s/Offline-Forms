@@ -20,6 +20,7 @@ import com.example.offlineforms.data.model.Form
 import com.example.offlineforms.data.model.FormField
 import com.example.offlineforms.Navigation.Routes
 import com.example.offlineforms.ui.viewmodel.FormViewModel
+import kotlinx.coroutines.delay
 import java.util.UUID
 import androidx.compose.foundation.layout.FlowRow
 
@@ -34,6 +35,7 @@ fun FormBuilderScreen(
     // Local UI state for the form being built
     var formTitle by remember { mutableStateOf("") }
     var fields by remember { mutableStateOf(listOf<FormField>()) }
+    var localFormId by remember { mutableStateOf(formId ?: "") }
 
     // Local state for the question being added
     var questionLabel by remember { mutableStateOf("") }
@@ -44,20 +46,53 @@ fun FormBuilderScreen(
     val isLoading by formViewModel.isLoading.collectAsState()
     val currentForm by formViewModel.currentForm.collectAsState()
 
+    // When currentForm loads, populate local state
+    // Use a ref-like flag to only initialize once
+    var isInitialized by remember { mutableStateOf(false) }
+
     // If editing an existing form, load it and populate fields
     LaunchedEffect(formId) {
         if (formId != null) {
             formViewModel.loadFormById(formId)
         } else {
+            // It's a brand new form
             formViewModel.clearCurrentForm()
+            formTitle = ""
+            fields = emptyList()
+            localFormId = ""
+            isInitialized = true // Mark as ready so stale data doesn't load
         }
     }
 
-    // When currentForm loads, populate local state
     LaunchedEffect(currentForm) {
-        currentForm?.let { form ->
-            formTitle = form.title
-            fields = form.fields
+        if (!isInitialized && currentForm != null) {
+            currentForm?.let { form ->
+                formTitle = form.title
+                fields = form.fields
+                localFormId = form.id
+                isInitialized = true
+            }
+        }
+    }
+
+    // Auto-save logic
+    LaunchedEffect(formTitle, fields, localFormId) {
+        // Only auto-save if there's at least a title or some fields
+        if (formTitle.isNotEmpty() || fields.isNotEmpty()) {
+            delay(2000L) // Wait for 2 seconds of inactivity
+            
+            // Re-capture state inside delay to ensure we have the latest
+            val formToSave = Form(
+                id = localFormId,
+                title = formTitle,
+                fields = fields
+            )
+            
+            formViewModel.saveForm(formToSave) { generatedId ->
+                if (localFormId.isEmpty()) {
+                    localFormId = generatedId
+                }
+            }
         }
     }
 
@@ -82,14 +117,14 @@ fun FormBuilderScreen(
                             onClick = {
                                 // Save temporarily then navigate to preview
                                 val tempForm = Form(
-                                    id = formId ?: "",
+                                    id = localFormId,
                                     title = formTitle,
                                     fields = fields
                                 )
                                 formViewModel.setCurrentForm(tempForm)
                                 navController.navigate(
-                                    if (formId != null)
-                                        "form_preview/$formId"
+                                    if (localFormId.isNotEmpty())
+                                        "form_preview/$localFormId"
                                     else
                                         "form_preview/preview_temp"
                                 )
@@ -116,7 +151,7 @@ fun FormBuilderScreen(
                 Button(
                     onClick = {
                         val form = Form(
-                            id = formId ?: "",
+                            id = localFormId,
                             title = formTitle,
                             fields = fields
                         )
@@ -181,7 +216,7 @@ fun FormBuilderScreen(
                     )
                 }
 
-                items(fields) { field ->
+                items(fields, key = { it.id }) { field ->
                     FieldCard(
                         field = field,
                         onDelete = {
@@ -193,7 +228,7 @@ fun FormBuilderScreen(
 
             // Divider between questions and add section
             item {
-                Divider(
+                HorizontalDivider(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                 )
             }

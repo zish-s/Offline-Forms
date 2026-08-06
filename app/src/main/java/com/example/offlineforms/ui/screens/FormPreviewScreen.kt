@@ -138,7 +138,7 @@ fun FormPreviewScreen(
                         )
                     }
 
-                    item { Divider() }
+                    item { HorizontalDivider() }
 
                     // Render each field in preview mode
                     items(items = currentForm!!.fields) { field: FormField ->

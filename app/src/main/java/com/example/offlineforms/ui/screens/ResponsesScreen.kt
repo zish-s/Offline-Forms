@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.data.model.FormSubmission
@@ -29,6 +30,7 @@ fun ResponsesScreen(
 ) {
     val submissions by formViewModel.submissions.collectAsState()
     val isLoading by formViewModel.isLoading.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(formId) {
         formViewModel.loadSubmissions(formId)
@@ -129,6 +131,25 @@ fun ResponsesScreen(
                             },
                             onDeleteClick = {
                                 formViewModel.deleteSubmission(submission.id)
+                            },
+                            onShareClick = {
+                                val shareText = buildString {
+                                    appendLine("Form: ${submission.formTitle}")
+                                    appendLine("Submitted: ${formatTimestamp(submission.submittedAt)}")
+                                    appendLine("---")
+                                    submission.answers.entries.forEachIndexed { index, entry ->
+                                        appendLine("Q${index + 1}: ${entry.value}")
+                                    }
+                                }
+
+                                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Form Response: ${submission.formTitle}")
+                                    putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                }
+                                context.startActivity(
+                                    android.content.Intent.createChooser(shareIntent, "Share response via")
+                                )
                             }
                         )
                     }
@@ -143,7 +164,8 @@ fun ResponseCard(
     submission: FormSubmission,
     index: Int,
     onViewClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onShareClick: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -242,7 +264,7 @@ fun ResponseCard(
 
                 // Share button - placeholder for future update
                 OutlinedButton(
-                    onClick = { /* TODO: Share as PDF - coming in future update */ },
+                    onClick = onShareClick,
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {

@@ -117,13 +117,13 @@ class FormViewModel : ViewModel() {
     }
 
     // Save a form (works for both new and existing forms)
-    fun saveForm(form: Form, onSuccess: () -> Unit) {
+    fun saveForm(form: Form, onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             val result = repository.saveForm(form)
             _isLoading.value = false
             if (result.isSuccess) {
-                onSuccess()
+                onSuccess(result.getOrThrow())
             } else {
                 _errorMessage.value = result.exceptionOrNull()?.message
                     ?: "Failed to save form"

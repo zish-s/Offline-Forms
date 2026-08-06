@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.ui.viewmodel.FormViewModel
@@ -26,6 +27,7 @@ fun ResponseDetailScreen(
 ) {
     val currentSubmission by formViewModel.currentSubmission.collectAsState()
     val isLoading by formViewModel.isLoading.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(responseId) {
         formViewModel.loadSubmissionById(responseId)
@@ -46,9 +48,29 @@ fun ResponseDetailScreen(
                     }
                 },
                 actions = {
-                    // Share icon in top bar - placeholder for future update
+                    // Share icon in top bar
                     IconButton(
-                        onClick = { /* TODO: Share as PDF - coming in future update */ }
+                        onClick = {
+                            currentSubmission?.let { submission ->
+                                val shareText = buildString {
+                                    appendLine("Form: ${submission.formTitle}")
+                                    appendLine("Submitted: ${formatTimestamp(submission.submittedAt)}")
+                                    appendLine("---")
+                                    submission.answers.entries.forEachIndexed { index, entry ->
+                                        appendLine("Q${index + 1}: ${entry.value}")
+                                    }
+                                }
+
+                                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Form Response: ${submission.formTitle}")
+                                    putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                }
+                                context.startActivity(
+                                    android.content.Intent.createChooser(shareIntent, "Share response via")
+                                )
+                            }
+                        }
                     ) {
                         Icon(
                             Icons.Default.Share,
@@ -67,7 +89,27 @@ fun ResponseDetailScreen(
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Button(
-                    onClick = { /* TODO: Share as PDF - coming in future update */ },
+                    onClick = {
+                        currentSubmission?.let { submission ->
+                            val shareText = buildString {
+                                appendLine("Form: ${submission.formTitle}")
+                                appendLine("Submitted: ${formatTimestamp(submission.submittedAt)}")
+                                appendLine("---")
+                                submission.answers.entries.forEachIndexed { index, entry ->
+                                    appendLine("Q${index + 1}: ${entry.value}")
+                                }
+                            }
+
+                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Form Response: ${submission.formTitle}")
+                                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                            }
+                            context.startActivity(
+                                android.content.Intent.createChooser(shareIntent, "Share response via")
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
@@ -80,7 +122,7 @@ fun ResponseDetailScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Share as PDF", fontSize = 16.sp)
+                    Text("Share response", fontSize = 16.sp)
                 }
             }
         }

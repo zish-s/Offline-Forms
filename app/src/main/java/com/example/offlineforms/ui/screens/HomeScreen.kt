@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.offlineforms.data.model.Form
@@ -96,6 +97,7 @@ fun HomeScreen(
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = {
+                        formViewModel.clearCurrentForm()
                         navController.navigate(Routes.FORM_BUILDER)
                     },
                     shape = CircleShape,
@@ -273,7 +275,7 @@ fun FormCard(
 
             // Action buttons row
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 //share button
@@ -281,71 +283,91 @@ fun FormCard(
                 OutlinedButton(
                     onClick = onShareClick,
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Share", fontSize = 12.sp)
+                    Text(
+                        "Share",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 // Edit button
                 OutlinedButton(
                     onClick = onEditClick,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.9f),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit", fontSize = 12.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        "Edit",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 // Fill button
                 OutlinedButton(
                     onClick = onFillClick,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.8f),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         Icons.Default.EditNote,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Fill", fontSize = 12.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        "Fill",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 // Responses button
                 OutlinedButton(
                     onClick = onResponsesClick,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.3f),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         Icons.Default.Inbox,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Responses", fontSize = 12.sp)
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        "Responses",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible // Try to show all if possible
+                    )
                 }
-
-                // Delete button
+          // Delete button
                 IconButton(
                     onClick = { showDeleteDialog = true },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete form",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
