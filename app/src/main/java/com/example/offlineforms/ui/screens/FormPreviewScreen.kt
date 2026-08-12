@@ -112,37 +112,49 @@ fun FormPreviewScreen(
             }
 
             else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 16.dp)
-                ) {
-                    // Form title
-                    item {
-                        Text(
-                            text = currentForm!!.title,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
+                val form = currentForm
+                if (form == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 16.dp)
+                    ) {
+                        // Form title
+                        item {
+                            Text(
+                                text = form.title,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
 
-                    item {
-                        Text(
-                            text = "This is a preview. Fields are not fillable here.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                        )
-                    }
+                        item {
+                            Text(
+                                text = "This is a preview. Fields are not fillable here.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            )
+                        }
 
-                    item { HorizontalDivider() }
+                        item { HorizontalDivider() }
 
-                    // Render each field in preview mode
-                    items(items = currentForm!!.fields) { field: FormField ->
-                        PreviewFieldItem(field = field)
+                        // Render each field in preview mode
+                        items(items = form.fields) { field: FormField ->
+                            PreviewFieldItem(field = field)
+                        }
                     }
                 }
             }

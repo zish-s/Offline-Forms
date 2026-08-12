@@ -50,26 +50,53 @@ class MainActivity : ComponentActivity() {
             }
 
             uri?.let {
-                try {
-                    val inputStream = contentResolver.openInputStream(it)
-                    val jsonString = inputStream?.bufferedReader()?.readText()
-                    inputStream?.close()
-
-                    if (!jsonString.isNullOrEmpty()) {
-                        formViewModel.importFormFromJson(
-                            jsonString = jsonString,
-                            onSuccess = {
-                                android.util.Log.d("MainActivity", "Form imported successfully")
-                            },
-                            onError = {
-                                android.util.Log.e("MainActivity", "Form import failed")
-                            }
-                        )
+                // Ensure auth is initialized first so we have a userId
+                formViewModel.initializeAuth(
+                    onReady = {
+                        importFile(it)
+                    },
+                    onNoInternet = {
+                        // Still try to import, maybe it works with local cache
+                        importFile(it)
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Failed to read shared file", e)
-                }
+                )
             }
+        }
+    }
+
+    private fun importFile(uri: android.net.Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val jsonString = inputStream?.bufferedReader()?.readText()
+            inputStream?.close()
+
+            if (!jsonString.isNullOrEmpty()) {
+                formViewModel.importFormFromJson(
+                    jsonString = jsonString,
+                    onSuccess = {
+                        runOnUiThread {
+                            android.widget.Toast.makeText(
+                                this,
+                                "Form imported! Check your Imports screen.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        android.util.Log.d("MainActivity", "Form imported successfully")
+                    },
+                    onError = {
+                        runOnUiThread {
+                            android.widget.Toast.makeText(
+                                this,
+                                "Failed to import form.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        android.util.Log.e("MainActivity", "Form import failed")
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to read shared file", e)
         }
     }
 }

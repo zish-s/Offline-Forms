@@ -61,8 +61,15 @@ class FormViewModel : ViewModel() {
     // Load all imported forms
     fun loadImportedForms() {
         viewModelScope.launch {
-            repository.getImportedForms().collect { imports ->
-                _importedForms.value = imports
+            try {
+                val userId = repository.getCurrentUserId()
+                if (userId.isEmpty()) return@launch
+
+                repository.getImportedForms(userId).collect { imports ->
+                    _importedForms.value = imports
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FormViewModel", "loadImportedForms failed", e)
             }
         }
     }
@@ -75,6 +82,19 @@ class FormViewModel : ViewModel() {
     // Parse and save an imported form
     fun importFormFromJson(jsonString: String, onSuccess: () -> Unit, onError: () -> Unit) {
         viewModelScope.launch {
+            // Wait for user to be logged in (even anonymously) before saving
+            // This ensures the import is linked to a valid userId
+            var retryCount = 0
+            while (repository.getCurrentUserId().isEmpty() && retryCount < 10) {
+                kotlinx.coroutines.delay(500)
+                retryCount++
+            }
+
+            if (repository.getCurrentUserId().isEmpty()) {
+                onError()
+                return@launch
+            }
+
             val importedForm = repository.parseImportedForm(jsonString)
             if (importedForm != null) {
                 val result = repository.saveImportedForm(importedForm)
@@ -100,8 +120,16 @@ class FormViewModel : ViewModel() {
     // Called once when HomeScreen appears
     fun loadForms() {
         viewModelScope.launch {
-            repository.getForms().collect { formList ->
-                _forms.value = formList
+            try {
+                val userId = repository.getCurrentUserId()
+                if (userId.isEmpty()) return@launch
+
+                repository.getForms(userId).collect { formList ->
+                    _forms.value = formList
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FormViewModel", "loadForms failed", e)
+                _errorMessage.value = "Failed to load forms"
             }
         }
     }
@@ -158,8 +186,15 @@ class FormViewModel : ViewModel() {
     // Load all submissions for a specific form
     fun loadSubmissions(formId: String) {
         viewModelScope.launch {
-            repository.getSubmissions(formId).collect { submissionList ->
-                _submissions.value = submissionList
+            try {
+                val userId = repository.getCurrentUserId()
+                if (userId.isEmpty()) return@launch
+
+                repository.getSubmissions(formId, userId).collect { submissionList ->
+                    _submissions.value = submissionList
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FormViewModel", "loadSubmissions failed", e)
             }
         }
     }
@@ -199,14 +234,10 @@ class FormViewModel : ViewModel() {
         }
     }
 
-    // ─────────────────────────────────────────
-    // AUTH OPERATIONS
-    // ─────────────────────────────────────────
-
     fun signIn(email: String, password: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            val result = repository.signUpWithEmail(email, password)
+            val result = repository.signInOrLink(email, password)
             _isLoading.value = false
             if (result.isSuccess) {
                 _isLoggedIn.value = true
@@ -248,7 +279,6 @@ class FormViewModel : ViewModel() {
             }
         }
     }
-
 
     fun signInOrLink(email: String, password: String, onSuccess: () -> Unit) {
         viewModelScope.launch {

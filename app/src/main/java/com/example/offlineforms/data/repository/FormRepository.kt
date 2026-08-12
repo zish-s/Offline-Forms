@@ -25,7 +25,7 @@ class FormRepository {
 
     // Helper to get the current logged-in user's ID
     // We use this to make sure users only see their own forms
-    private val currentUserId: String
+    private val currentUid: String
         get() = auth.currentUser?.uid ?: ""
 
     // Reference to the "forms" collection in Firestore
@@ -35,6 +35,9 @@ class FormRepository {
     private val submissionsCollection = firestore.collection("submissions")
 
     private val importsCollection = firestore.collection("imports")
+
+    // Get the current user ID
+    fun getCurrentUserId(): String = currentUid
 
     // ─────────────────────────────────────────
     // FORM CRUD OPERATIONS
@@ -50,9 +53,12 @@ class FormRepository {
                 formsCollection.document(form.id)
             }
 
+            // Always use currentUid to ensure ownership, unless explicitly set (migration case)
+            val formUserId = if (form.userId.isNotEmpty()) form.userId else currentUid
+
             val formToSave = form.copy(
                 id = docRef.id,
-                userId = currentUserId,
+                userId = formUserId,
                 updatedAt = System.currentTimeMillis()
             )
 
@@ -76,13 +82,8 @@ class FormRepository {
 
             // set() with SetOptions.merge() completes instantly using local cache,
             // it does not wait for network confirmation
-            docRef.set(formMap).addOnFailureListener { e ->
-                android.util.Log.e("FormRepository", "saveForm background failure", e)
-            }
+            docRef.set(formMap).await() // Use await() to ensure local write is confirmed
 
-            // We don't await() the network round-trip.
-            // Firestore's local cache write is synchronous, so we can
-            // confidently return success right after triggering the write.
             Result.success(docRef.id)
         } catch (e: Exception) {
             android.util.Log.e("FormRepository", "saveForm failed", e)
@@ -92,9 +93,13 @@ class FormRepository {
 
     // READ - Get all forms for the current user as a real-time stream
 // Flow means the UI automatically updates whenever data changes
-    fun getForms(): Flow<List<Form>> = callbackFlow {
+    fun getForms(userId: String): Flow<List<Form>> = callbackFlow {
+        if (userId.isEmpty()) {
+            trySend(emptyList())
+            return@callbackFlow
+        }
         val listener = formsCollection
-            .whereEqualTo("userId", currentUserId)
+            .whereEqualTo("userId", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -150,9 +155,11 @@ class FormRepository {
                 submissionsCollection.document(submission.id)
             }
 
+            val submissionUserId = if (submission.userId.isNotEmpty()) submission.userId else currentUid
+
             val submissionToSave = submission.copy(
                 id = docRef.id,
-                userId = currentUserId
+                userId = submissionUserId
             )
 
             val submissionMap = mapOf(
@@ -165,9 +172,7 @@ class FormRepository {
                 "userId" to submissionToSave.userId
             )
 
-            docRef.set(submissionMap).addOnFailureListener { e ->
-                android.util.Log.e("FormRepository", "saveSubmission background failure", e)
-            }
+            docRef.set(submissionMap).await()
 
             Result.success(docRef.id)
         } catch (e: Exception) {
@@ -177,10 +182,14 @@ class FormRepository {
     }
 
     // READ - Get all submissions for a specific form as a real-time stream
-    fun getSubmissions(formId: String): Flow<List<FormSubmission>> = callbackFlow {
+    fun getSubmissions(formId: String, userId: String): Flow<List<FormSubmission>> = callbackFlow {
+        if (userId.isEmpty()) {
+            trySend(emptyList())
+            return@callbackFlow
+        }
         val listener = submissionsCollection
             .whereEqualTo("formId", formId)
-            .whereEqualTo("userId", currentUserId)
+            .whereEqualTo("userId", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -228,21 +237,36 @@ class FormRepository {
     suspend fun signInOrLink(email: String, password: String): Result<Unit> {
         return try {
             val currentUser = auth.currentUser
-            if (currentUser != null && currentUser.isAnonymous) {
-                // Anonymous user upgrading to real account
+            val oldUid = currentUser?.uid ?: ""
+            val isAnonymous = currentUser?.isAnonymous ?: false
+
+            if (currentUser != null && isAnonymous) {
+                // 1. Fetch current anonymous data while we still have permission
+                val forms = formsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toForm() }
+                val submissions = submissionsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toSubmission() }
+                val imports = importsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toImportedForm() }
+
                 try {
                     val credential = com.google.firebase.auth.EmailAuthProvider
                         .getCredential(email, password)
                     currentUser.linkWithCredential(credential).await()
+                    // Linking worked! UID is the same, no data migration needed.
                     Result.success(Unit)
-                } catch (e: Exception) {
-                    // Link failed — they likely already have an account
-                    // Sign in normally instead
+                } catch (linkError: Exception) {
+                    // Linking failed (collision). Sign in to the existing account.
                     auth.signInWithEmailAndPassword(email, password).await()
+                    val newUid = auth.currentUser?.uid ?: ""
+
+                    if (newUid.isNotEmpty() && newUid != oldUid) {
+                        // 2. Upload the anonymous data to the new account
+                        migrateDataToNewAccount(newUid, forms, submissions, imports)
+                    }
                     Result.success(Unit)
                 }
             } else {
-                // No anonymous session — just sign in normally
                 auth.signInWithEmailAndPassword(email, password).await()
                 Result.success(Unit)
             }
@@ -254,11 +278,61 @@ class FormRepository {
 
     suspend fun signUpWithEmail(email: String, password: String): Result<Unit> {
         return try {
-            auth.createUserWithEmailAndPassword(email, password).await()
+            val currentUser = auth.currentUser
+            val oldUid = currentUser?.uid ?: ""
+            val isAnonymous = currentUser?.isAnonymous ?: false
+
+            if (currentUser != null && isAnonymous) {
+                // Fetch data before creating new user
+                val forms = formsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toForm() }
+                val submissions = submissionsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toSubmission() }
+                val imports = importsCollection.whereEqualTo("userId", oldUid).get().await()
+                    .documents.mapNotNull { it.toImportedForm() }
+
+                val credential = com.google.firebase.auth.EmailAuthProvider
+                    .getCredential(email, password)
+
+                try {
+                    currentUser.linkWithCredential(credential).await()
+                } catch (linkError: Exception) {
+                    auth.createUserWithEmailAndPassword(email, password).await()
+                    val newUid = auth.currentUser?.uid ?: ""
+                    if (newUid.isNotEmpty() && newUid != oldUid) {
+                        migrateDataToNewAccount(newUid, forms, submissions, imports)
+                    }
+                }
+            } else {
+                auth.createUserWithEmailAndPassword(email, password).await()
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             android.util.Log.e("FormRepository", "signUp failed", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun migrateDataToNewAccount(
+        newUid: String,
+        forms: List<Form>,
+        submissions: List<FormSubmission>,
+        imports: List<ImportedForm>
+    ) {
+        try {
+            // Re-save all previously anonymous items under the new permanent UID
+            forms.forEach { form ->
+                saveForm(form.copy(userId = newUid, isSynced = false))
+            }
+            submissions.forEach { sub ->
+                saveSubmission(sub.copy(userId = newUid, isSynced = false))
+            }
+            imports.forEach { imp ->
+                saveImportedForm(imp) // saveImportedForm already uses currentUid internally
+            }
+            android.util.Log.d("FormRepository", "Successfully migrated ${forms.size} forms to account $newUid")
+        } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "migrateDataToNewAccount failed", e)
         }
     }
 
@@ -310,19 +384,21 @@ class FormRepository {
 
     private fun DocumentSnapshot.toImportedForm(): ImportedForm? {
         return try {
-            val fieldsData = get("fields") as? List<Map<String, Any>> ?: emptyList()
+            val fieldsData = get("fields") as? List<*> ?: emptyList<Any>()
             ImportedForm(
                 id = getString("id") ?: "",
                 title = getString("title") ?: "",
-                fields = fieldsData.map { fieldMap ->
+                fields = fieldsData.filterIsInstance<Map<String, Any>>().map { fieldMap ->
                     FormField(
                         id = fieldMap["id"] as? String ?: "",
                         label = fieldMap["label"] as? String ?: "",
-                        type = FieldType.valueOf(
-                            fieldMap["type"] as? String ?: "TEXT"
-                        ),
+                        type = try {
+                            FieldType.valueOf(fieldMap["type"] as? String ?: "TEXT")
+                        } catch (e: Exception) {
+                            FieldType.TEXT
+                        },
                         isRequired = fieldMap["isRequired"] as? Boolean ?: false,
-                        options = fieldMap["options"] as? List<String> ?: emptyList()
+                        options = (fieldMap["options"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                     )
                 },
                 importedAt = getLong("importedAt") ?: 0L,
@@ -336,19 +412,21 @@ class FormRepository {
 
     private fun DocumentSnapshot.toForm(): Form? {
         return try {
-            val fieldsData = get("fields") as? List<Map<String, Any>> ?: emptyList()
+            val fieldsData = get("fields") as? List<*> ?: emptyList<Any>()
             Form(
                 id = getString("id") ?: "",
                 title = getString("title") ?: "",
-                fields = fieldsData.map { fieldMap ->
+                fields = fieldsData.filterIsInstance<Map<String, Any>>().map { fieldMap ->
                     FormField(
                         id = fieldMap["id"] as? String ?: "",
                         label = fieldMap["label"] as? String ?: "",
-                        type = FieldType.valueOf(
-                            fieldMap["type"] as? String ?: "TEXT"
-                        ),
+                        type = try {
+                            FieldType.valueOf(fieldMap["type"] as? String ?: "TEXT")
+                        } catch (e: Exception) {
+                            FieldType.TEXT
+                        },
                         isRequired = fieldMap["isRequired"] as? Boolean ?: false,
-                        options = fieldMap["options"] as? List<String> ?: emptyList()
+                        options = (fieldMap["options"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                     )
                 },
                 createdAt = getLong("createdAt") ?: 0L,
@@ -363,11 +441,12 @@ class FormRepository {
 
     private fun DocumentSnapshot.toSubmission(): FormSubmission? {
         return try {
+            val answersData = get("answers") as? Map<*, *> ?: emptyMap<Any, Any>()
             FormSubmission(
                 id = getString("id") ?: "",
                 formId = getString("formId") ?: "",
                 formTitle = getString("formTitle") ?: "",
-                answers = get("answers") as? Map<String, String> ?: emptyMap(),
+                answers = answersData.map { it.key.toString() to it.value.toString() }.toMap(),
                 submittedAt = getLong("submittedAt") ?: 0L,
                 isSynced = getBoolean("isSynced") ?: false,
                 userId = getString("userId") ?: ""
@@ -377,44 +456,58 @@ class FormRepository {
         }
     }
 
-    // ─────────────────────────────────────────
-// EXPORT / IMPORT OPERATIONS
-// ─────────────────────────────────────────
-
     // Converts a Form to a JSON string for sharing
     fun exportFormToJson(form: Form): String {
-        val fieldsJson = form.fields.joinToString(",") { field ->
-            """
-        {
-            "id": "${field.id}",
-            "label": "${field.label}",
-            "type": "${field.type.name}",
-            "isRequired": ${field.isRequired},
-            "options": [${field.options.joinToString(",") { "\"$it\"" }}]
+        fun escape(s: String): String {
+            return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
         }
-        """.trimIndent()
+
+        val fieldsJson = form.fields.joinToString(",") { field ->
+            val optionsJson = field.options.joinToString(",") { "\"${escape(it)}\"" }
+            """
+            {
+                "id": "${escape(field.id)}",
+                "label": "${escape(field.label)}",
+                "type": "${field.type.name}",
+                "isRequired": ${field.isRequired},
+                "options": [$optionsJson]
+            }
+            """.trimIndent()
         }
 
         return """
-    {
-        "offlineFormsExport": true,
-        "id": "${form.id}",
-        "title": "${form.title}",
-        "creatorUserId": "${form.userId}",
-        "createdAt": ${form.createdAt},
-        "fields": [$fieldsJson]
-    }
-    """.trimIndent()
+        {
+            "offlineFormsExport": true,
+            "id": "${escape(form.id)}",
+            "title": "${escape(form.title)}",
+            "creatorUserId": "${escape(form.userId)}",
+            "createdAt": ${form.createdAt},
+            "fields": [$fieldsJson]
+        }
+        """.trimIndent()
     }
 
     // Parses a JSON string back into an ImportedForm
     fun parseImportedForm(jsonString: String): ImportedForm? {
         return try {
-            // Basic JSON parsing without external library
+            fun unescape(s: String): String {
+                return s.replace("\\\"", "\"")
+                    .replace("\\\\", "\\")
+                    .replace("\\n", "\n")
+                    .replace("\\r", "\r")
+                    .replace("\\t", "\t")
+            }
+
             fun extractString(json: String, key: String): String {
-                val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\""
+                // Look for "key" : "value"
+                // The value regex handles escaped quotes: (?:[^"\\]|\\.)*
+                val pattern = "\"$key\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\""
                 val match = Regex(pattern).find(json)
-                return match?.groupValues?.get(1) ?: ""
+                return unescape(match?.groupValues?.get(1) ?: "")
             }
 
             fun extractBoolean(json: String, key: String): Boolean {
@@ -429,62 +522,38 @@ class FormRepository {
                 return match?.groupValues?.get(1)?.toLongOrNull() ?: 0L
             }
 
-            fun extractArray(json: String, key: String): String {
-                val startKey = "\"$key\""
-                val startIndex = json.indexOf(startKey)
-                if (startIndex == -1) return "[]"
-                val arrayStart = json.indexOf("[", startIndex)
-                if (arrayStart == -1) return "[]"
-                var depth = 0
-                var i = arrayStart
-                while (i < json.length) {
-                    when (json[i]) {
-                        '[' -> depth++
-                        ']' -> {
-                            depth--
-                            if (depth == 0) return json.substring(arrayStart, i + 1)
-                        }
-                    }
-                    i++
-                }
-                return "[]"
-            }
+            // Find the "fields" array content
+            val fieldsMatch = Regex("\"fields\"\\s*:\\s*\\[([\\s\\S]*)\\]").find(jsonString)
+            val fieldsArrayContent = fieldsMatch?.groupValues?.get(1) ?: ""
 
-            fun extractObjects(arrayJson: String): List<String> {
-                val objects = mutableListOf<String>()
-                var depth = 0
-                var start = -1
-                for (i in arrayJson.indices) {
-                    when (arrayJson[i]) {
-                        '{' -> {
-                            if (depth == 0) start = i
-                            depth++
-                        }
-                        '}' -> {
-                            depth--
-                            if (depth == 0 && start != -1) {
-                                objects.add(arrayJson.substring(start, i + 1))
-                            }
+            // Split the array content into individual field objects {}
+            // We look for { ... } at the top level of the array content
+            val fieldObjects = mutableListOf<String>()
+            var depth = 0
+            var start = -1
+            for (i in fieldsArrayContent.indices) {
+                when (fieldsArrayContent[i]) {
+                    '{' -> {
+                        if (depth == 0) start = i
+                        depth++
+                    }
+                    '}' -> {
+                        depth--
+                        if (depth == 0 && start != -1) {
+                            fieldObjects.add(fieldsArrayContent.substring(start, i + 1))
                         }
                     }
                 }
-                return objects
             }
-
-            fun extractStringList(arrayJson: String): List<String> {
-                return Regex("\"([^\"]*)\"").findAll(arrayJson)
-                    .map { it.groupValues[1] }
-                    .toList()
-            }
-
-            // Verify it's a valid OfflineForms export
-            if (!jsonString.contains("\"offlineFormsExport\": true")) return null
-
-            val fieldsArrayJson = extractArray(jsonString, "fields")
-            val fieldObjects = extractObjects(fieldsArrayJson)
 
             val fields = fieldObjects.map { fieldJson ->
-                val optionsArrayJson = extractArray(fieldJson, "options")
+                // Extract options array from fieldJson
+                val optionsMatch = Regex("\"options\"\\s*:\\s*\\[([\\s\\S]*)\\]").find(fieldJson)
+                val optionsContent = optionsMatch?.groupValues?.get(1) ?: ""
+                val options = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"").findAll(optionsContent)
+                    .map { unescape(it.groupValues[1]) }
+                    .toList()
+
                 FormField(
                     id = extractString(fieldJson, "id"),
                     label = extractString(fieldJson, "label"),
@@ -494,9 +563,12 @@ class FormRepository {
                         FieldType.TEXT
                     },
                     isRequired = extractBoolean(fieldJson, "isRequired"),
-                    options = extractStringList(optionsArrayJson)
+                    options = options
                 )
             }
+
+            // Verify it's a valid OfflineForms export
+            if (!jsonString.contains("\"offlineFormsExport\": true")) return null
 
             ImportedForm(
                 id = java.util.UUID.randomUUID().toString(),
@@ -516,6 +588,7 @@ class FormRepository {
     suspend fun saveImportedForm(importedForm: ImportedForm): Result<String> {
         return try {
             val docRef = importsCollection.document(importedForm.id)
+
             val importMap = mapOf(
                 "id" to importedForm.id,
                 "title" to importedForm.title,
@@ -531,21 +604,24 @@ class FormRepository {
                 "importedAt" to importedForm.importedAt,
                 "originalCreatorId" to importedForm.originalCreatorId,
                 "originalFormId" to importedForm.originalFormId,
-                "userId" to currentUserId
+                "userId" to currentUid
             )
-            docRef.set(importMap).addOnFailureListener { e ->
-                android.util.Log.e("FormRepository", "saveImportedForm background failure", e)
-            }
+            docRef.set(importMap).await()
             Result.success(importedForm.id)
         } catch (e: Exception) {
+            android.util.Log.e("FormRepository", "saveImportedForm failed", e)
             Result.failure(e)
         }
     }
 
     // Get all imported forms as a live stream
-    fun getImportedForms(): Flow<List<ImportedForm>> = callbackFlow {
+    fun getImportedForms(userId: String): Flow<List<ImportedForm>> = callbackFlow {
+        if (userId.isEmpty()) {
+            trySend(emptyList())
+            return@callbackFlow
+        }
         val listener = importsCollection
-            .whereEqualTo("userId", currentUserId)
+            .whereEqualTo("userId", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)

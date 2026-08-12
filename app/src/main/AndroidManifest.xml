@@ -23,9 +23,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- This intent filter makes your app appear in the
-                 "Open with" list when someone taps a .json file
-                 shared via WhatsApp, email, Bluetooth etc. -->
+            <!-- Catch JSON files from any app -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.SEND" />
@@ -35,9 +33,13 @@
 
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="content" android:mimeType="*/*"
-                    android:pathPattern=".*\\.json" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.json" />
+                <data android:host="*" />
             </intent-filter>
 
         </activity>

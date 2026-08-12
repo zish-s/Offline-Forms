@@ -53,19 +53,25 @@ fun FormBuilderScreen(
     // If editing an existing form, load it and populate fields
     LaunchedEffect(formId) {
         if (formId != null) {
-            formViewModel.loadFormById(formId)
+            if (currentForm?.id != formId) {
+                formViewModel.loadFormById(formId)
+            }
         } else {
-            // It's a brand new form
-            formViewModel.clearCurrentForm()
-            formTitle = ""
-            fields = emptyList()
-            localFormId = ""
-            isInitialized = true // Mark as ready so stale data doesn't load
+            // New form mode.
+            // Only clear if we're not initialized AND there's no draft in currentForm
+            if (!isInitialized && currentForm == null) {
+                formTitle = ""
+                fields = emptyList()
+                localFormId = ""
+                isInitialized = true
+            }
         }
     }
 
     LaunchedEffect(currentForm) {
-        if (!isInitialized && currentForm != null) {
+        // Only populate if we haven't initialized yet AND the form we loaded matches the formId
+        // AND the user hasn't started adding data themselves (or we are specifically editing)
+        if (!isInitialized && currentForm != null && (formId == null || currentForm?.id == formId)) {
             currentForm?.let { form ->
                 formTitle = form.title
                 fields = form.fields
@@ -80,14 +86,14 @@ fun FormBuilderScreen(
         // Only auto-save if there's at least a title or some fields
         if (formTitle.isNotEmpty() || fields.isNotEmpty()) {
             delay(2000L) // Wait for 2 seconds of inactivity
-            
+
             // Re-capture state inside delay to ensure we have the latest
             val formToSave = Form(
                 id = localFormId,
                 title = formTitle,
                 fields = fields
             )
-            
+
             formViewModel.saveForm(formToSave) { generatedId ->
                 if (localFormId.isEmpty()) {
                     localFormId = generatedId
