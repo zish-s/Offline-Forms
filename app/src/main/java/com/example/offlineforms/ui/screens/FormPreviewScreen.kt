@@ -32,11 +32,9 @@ fun FormPreviewScreen(
 
     // Load form if coming from home screen edit flow
     LaunchedEffect(formId) {
-        if (formId != "preview_temp") {
+        if (formId != "preview_temp" && currentForm?.id != formId) {
             formViewModel.loadFormById(formId)
         }
-        // If "preview_temp" we already have it in currentForm
-        // from the builder screen's setCurrentForm() call
     }
 
     Scaffold(

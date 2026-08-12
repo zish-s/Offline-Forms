@@ -82,8 +82,6 @@ class FormViewModel : ViewModel() {
     // Parse and save an imported form
     fun importFormFromJson(jsonString: String, onSuccess: () -> Unit, onError: () -> Unit) {
         viewModelScope.launch {
-            // Wait for user to be logged in (even anonymously) before saving
-            // This ensures the import is linked to a valid userId
             var retryCount = 0
             while (repository.getCurrentUserId().isEmpty() && retryCount < 10) {
                 kotlinx.coroutines.delay(500)
@@ -91,19 +89,23 @@ class FormViewModel : ViewModel() {
             }
 
             if (repository.getCurrentUserId().isEmpty()) {
+                android.util.Log.e("FormViewModel", "Import failed: no user id after retries")
                 onError()
                 return@launch
             }
 
             val importedForm = repository.parseImportedForm(jsonString)
-            if (importedForm != null) {
-                val result = repository.saveImportedForm(importedForm)
-                if (result.isSuccess) {
-                    onSuccess()
-                } else {
-                    onError()
-                }
+            if (importedForm == null) {
+                android.util.Log.e("FormViewModel", "Import failed: parseImportedForm returned null. Raw JSON: $jsonString")
+                onError()
+                return@launch
+            }
+
+            val result = repository.saveImportedForm(importedForm)
+            if (result.isSuccess) {
+                onSuccess()
             } else {
+                android.util.Log.e("FormViewModel", "Import failed: saveImportedForm error", result.exceptionOrNull())
                 onError()
             }
         }

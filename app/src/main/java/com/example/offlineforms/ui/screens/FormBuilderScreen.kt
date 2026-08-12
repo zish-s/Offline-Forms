@@ -128,12 +128,7 @@ fun FormBuilderScreen(
                                     fields = fields
                                 )
                                 formViewModel.setCurrentForm(tempForm)
-                                navController.navigate(
-                                    if (localFormId.isNotEmpty())
-                                        "form_preview/$localFormId"
-                                    else
-                                        "form_preview/preview_temp"
-                                )
+                                navController.navigate("form_preview/preview_temp")
                             }
                         ) {
                             Text(

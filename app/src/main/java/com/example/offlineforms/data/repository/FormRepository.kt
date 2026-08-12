@@ -320,15 +320,17 @@ class FormRepository {
         imports: List<ImportedForm>
     ) {
         try {
-            // Re-save all previously anonymous items under the new permanent UID
+            // Re-save all previously anonymous items under the new permanent UID.
+            // We clear the document IDs to ensure we create NEW documents in the new account,
+            // as the rules likely won't allow us to overwrite documents owned by the old anonymous UID.
             forms.forEach { form ->
-                saveForm(form.copy(userId = newUid, isSynced = false))
+                saveForm(form.copy(id = "", userId = newUid, isSynced = false))
             }
             submissions.forEach { sub ->
-                saveSubmission(sub.copy(userId = newUid, isSynced = false))
+                saveSubmission(sub.copy(id = "", userId = newUid, isSynced = false))
             }
             imports.forEach { imp ->
-                saveImportedForm(imp) // saveImportedForm already uses currentUid internally
+                saveImportedForm(imp.copy(id = "", userId = newUid))
             }
             android.util.Log.d("FormRepository", "Successfully migrated ${forms.size} forms to account $newUid")
         } catch (e: Exception) {
@@ -403,7 +405,8 @@ class FormRepository {
                 },
                 importedAt = getLong("importedAt") ?: 0L,
                 originalCreatorId = getString("originalCreatorId") ?: "",
-                originalFormId = getString("originalFormId") ?: ""
+                originalFormId = getString("originalFormId") ?: "",
+                userId = getString("userId") ?: ""
             )
         } catch (e: Exception) {
             null
@@ -568,7 +571,10 @@ class FormRepository {
             }
 
             // Verify it's a valid OfflineForms export
-            if (!jsonString.contains("\"offlineFormsExport\": true")) return null
+            if (!extractBoolean(jsonString, "offlineFormsExport")) {
+                android.util.Log.e("FormRepository", "Import rejected: offlineFormsExport flag missing/false")
+                return null
+            }
 
             ImportedForm(
                 id = java.util.UUID.randomUUID().toString(),
@@ -576,7 +582,8 @@ class FormRepository {
                 fields = fields,
                 importedAt = System.currentTimeMillis(),
                 originalCreatorId = extractString(jsonString, "creatorUserId"),
-                originalFormId = extractString(jsonString, "id")
+                originalFormId = extractString(jsonString, "id"),
+                userId = currentUid
             )
         } catch (e: Exception) {
             android.util.Log.e("FormRepository", "parseImportedForm failed", e)
@@ -587,10 +594,17 @@ class FormRepository {
     // Save imported form to Firestore under "imports" collection
     suspend fun saveImportedForm(importedForm: ImportedForm): Result<String> {
         return try {
-            val docRef = importsCollection.document(importedForm.id)
+            val docRef = if (importedForm.id.isEmpty()) {
+                importsCollection.document()
+            } else {
+                importsCollection.document(importedForm.id)
+            }
+
+            // Ensure we have a valid userId
+            val importUserId = if (importedForm.userId.isNotEmpty()) importedForm.userId else currentUid
 
             val importMap = mapOf(
-                "id" to importedForm.id,
+                "id" to docRef.id,
                 "title" to importedForm.title,
                 "fields" to importedForm.fields.map { field ->
                     mapOf(
@@ -604,10 +618,10 @@ class FormRepository {
                 "importedAt" to importedForm.importedAt,
                 "originalCreatorId" to importedForm.originalCreatorId,
                 "originalFormId" to importedForm.originalFormId,
-                "userId" to currentUid
+                "userId" to importUserId
             )
             docRef.set(importMap).await()
-            Result.success(importedForm.id)
+            Result.success(docRef.id)
         } catch (e: Exception) {
             android.util.Log.e("FormRepository", "saveImportedForm failed", e)
             Result.failure(e)

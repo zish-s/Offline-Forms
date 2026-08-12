@@ -18,7 +18,8 @@ service cloud.firestore {
     }
 
     match /imports/{importId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null;
     }
   }
 }

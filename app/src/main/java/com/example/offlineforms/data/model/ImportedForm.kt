@@ -6,5 +6,6 @@ data class ImportedForm(
     val fields: List<FormField> = emptyList(),
     val importedAt: Long = System.currentTimeMillis(),
     val originalCreatorId: String = "",
-    val originalFormId: String = ""
+    val originalFormId: String = "",
+    val userId: String = ""
 )

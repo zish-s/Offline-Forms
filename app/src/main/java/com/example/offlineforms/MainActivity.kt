@@ -36,13 +36,9 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
-
         val action = intent.action
-        val type = intent.type
 
-        if ((action == Intent.ACTION_SEND || action == Intent.ACTION_VIEW)
-            && (type == "application/json" || type == "*/*")
-        ) {
+        if (action == Intent.ACTION_SEND || action == Intent.ACTION_VIEW) {
             val uri = if (action == Intent.ACTION_SEND) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM)
             } else {
@@ -50,14 +46,14 @@ class MainActivity : ComponentActivity() {
             }
 
             uri?.let {
-                // Ensure auth is initialized first so we have a userId
                 formViewModel.initializeAuth(
-                    onReady = {
-                        importFile(it)
-                    },
+                    onReady = { importFile(it) },
                     onNoInternet = {
-                        // Still try to import, maybe it works with local cache
-                        importFile(it)
+                        android.widget.Toast.makeText(
+                            this,
+                            "No internet connection. Connect once, then try importing again.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 )
             }
